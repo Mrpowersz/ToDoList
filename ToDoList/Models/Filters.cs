@@ -6,8 +6,17 @@
         {
             FilterString = filterString ?? "all-all";
             string[] filter = FilterString.Split("-");
-            Due = filter[0];
-            StatusId = filter[1];
+
+            if (filter.Length >= 2)
+            {
+                Due = filter[0];
+                StatusId = filter[1];
+            }
+            else
+            {
+                Due = "all";
+                StatusId = "all";
+            }
         }
         public string FilterString { get; }
         public string Due { get; }

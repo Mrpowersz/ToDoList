@@ -1,61 +1,120 @@
 ﻿@model IEnumerable<ToDoList.Models.ToDoListing>
 
-<div class="row">
-    <div class="col-md-2">
-        <form asp-action="Filter" method="post">
-            <div class="mb-3">
-                <label class="form-label">Due:</label>
-                <select name="filter" class="form-select"
-                        asp-items="@(new SelectList(ViewBag.DueFilters, "Key", "Value", ViewBag.SelectedDueFilter))">
-                    <option value="all">All</option>
-                </select>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Status:</label>
-                <select name="status" class="form-select" asp-items="@(new SelectList(ViewBag.Statuses, "StatusId", "Name", ViewBag.SelectedStatusId))">
-                    <option value="all">All</option>
-                </select>
-            </div>
-            <button type="submit" class="btn btn-primary">Filter</button>
-            <a asp-action="Index" asp-route-id="" class="btn btn-primary">Clear</a>
-        </form>
-        <div class="col-md-10">
-            <form asp-action="MarkComplete" method="Post" asp-route-id="@ViewBag.Filter.FilterString">
-                <table class="table table-borderd table-striped mt-2">
-                    <thead>
-                        <tr>
-                            <th>Description</th>
-                            <th>Due Date</th>
-                            <th>Status</th>
-                            <th class="w-25"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach(ToDoListing task in Model)
-                        {
-                            string overdue = task.Overdue ? "bg - warning" :"";
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                tasks: @Html.Raw(Json.Serialize(Model))
+                },
+            methods: {
+                toggleStatus(task, index) {
+                    axios.post('/Home/ToggleStatus/' + task.id)
+                        .then(response => {
+                            if (response.data.success) {
+                                Vue.set(this.tasks, index, {
+                                    ...this.tasks[index],
+                                    status: {
+                                        id: response.data.newStatusId,
+                                        name: response.data.newStatus
+                                    },
+                                    statusId: response.data.newStatusId  
+                                });
+                            } else {
+                                alert('Failed to toggle the status.');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error toggling the status:', error);
+                            alert('Failed to toggle the status.');
+                        });
+                },
+                deleteTask(taskId, index) {
+                    if (confirm('Are you sure you want to delete this task?')) {
+                        axios.post('/Home/Delete/' + taskId)
+                            .then(() => {
+                                this.tasks.splice(index, 1);
+                            })
+                            .catch(error => {
+                                console.error('Error deleting the task:', error);
+                                alert('Failed to delete the task.');
+                            });
+                    }
+                }
+           
+            },
+            filters: {
+                formatDate(value) {
+                    if (value) {
+                        return new Date(value).toLocaleDateString();
+                    }
+                }
+            }
+        });
+    </script>
+}
+<div id="app" class="container">
+    <div class="row">
+        <div class="col-md-2">
+            <form asp-action="Filter" method="post" class="d-grid gap-2">
+                <div class="mb-2">
+                    <label class="form-label">Due:</label>
+                    <select name="due" class="form-select form-select-sm"
+                            asp-items="@(new SelectList(ViewBag.DueFilters, "Key", "Value", ViewBag.SelectedDueFilter))">
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Status:</label>
+                    <select name="status" class="form-select form-select-sm"
+                            asp-items="@(new SelectList(ViewBag.Statuses, "StatusId", "Name", ViewBag.SelectedStatusId))">
+                        <option value="all">All</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+                <a asp-action="Index" class="btn btn-secondary btn-sm">Clear</a>
+            </form>
+        </div>
+
+        <div class="col-md-9">
+            <div class="card">
+                <div class="card-header">
+                    <a asp-action="Add" class="btn btn-primary">Add Task</a>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-striped mb-0">
+                        <thead>
                             <tr>
-                                <td>@task.Description</td>
-                                <td class="@overdue">@task.DueDate.ToShortDateString()</td>
-                                <td class="@overdue">@task.Status.Name</td>
+                                <th>Description</th>
+                                <th>Due Date</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(task, index) in tasks">
+                                <td>{{ task.description }}</td>
+                                <td>{{ task.dueDate | formatDate }}</td>
                                 <td>
-                                    @if(task.StatusId == "open")
-                                    {
-                                        <button type="submit" class="btn btn-primary btn-sm" 
-                                        name="@nameof(ToDoListing.Id)" value="@task.Id">Mark Completed</button>
-                                    }
+                                    <button v-on:click="toggleStatus(task, index)"
+                                            class="btn"
+                                            :class="{ 'btn-success': task.statusId === 'open', 'btn-warning': task.statusId === 'closed' }">
+                                        {{ task.status.name }}
+                                    </button>
+                                </td>
+                                <td>
+                                    <a :href="'/Home/Edit/' + task.id" class="btn btn-sm btn-secondary">Edit</a>
+                                    <button v-on:click="deleteTask(task.id, index)" class="btn btn-sm btn-danger">Delete</button>
                                 </td>
                             </tr>
-                        }
-                    </tbody>
-                </table>
-            </form>
-            <form asp-action="DeleteComplete" method="post" asp-route-id="@ViewBag.Filter.FilterString">
-                <a asp-action="Add" class="btn btn-primary">Add new task</a>
-                <button type="submit" class="btn btn-primary">Delete completed </button>
-            </form>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 </div>
+
 
 

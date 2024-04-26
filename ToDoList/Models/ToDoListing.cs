@@ -1,10 +1,10 @@
-﻿using System;
+﻿using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
 using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
+
 
 namespace ToDoList.Models
 {
-    public class ToDoListing  // Rename from ToDoList to ToDoItem
+    public class ToDoListing 
     {
         public int Id { get; set; }
 
@@ -17,7 +17,8 @@ namespace ToDoList.Models
 
         [Required(ErrorMessage = "Please select status.")]
         public string StatusId { get; set; } = string.Empty;
-        public Status Status { get; set; } = null!;
+		[ValidateNever]
+		public Status Status { get; set; } = null!;
         public bool Overdue => StatusId == "open" && DueDate < DateTime.Today;
     }
 
@@ -29,6 +30,4 @@ namespace ToDoList.Models
             return value != null && DateTime.TryParse(value.ToString(), out dt) && dt >= DateTime.Today;
         }
     }
-
-    //dizains krutaks, 
 }

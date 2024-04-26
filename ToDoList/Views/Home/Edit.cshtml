@@ -1,7 +1,7 @@
 ﻿@model ToDoList.Models.ToDoListing
 
 @{
-    var today = DateTime.Today.ToString("yyyy-MM-dd");
+    ViewData["Title"] = "Edit Task";
 }
 
 @section Scripts {
@@ -11,8 +11,9 @@
             el: '#app',
             data: {
                 task: {
+                    id: '@Model.Id',
                     description: '@Model.Description',
-                    dueDate: '@today',
+                    dueDate: '@Model.DueDate.ToString("yyyy-MM-dd")', 
                     statusId: '@Model.StatusId'
                 }
             }
@@ -20,36 +21,28 @@
     </script>
 }
 
-<h2>New Tasks</h2>
-
-<div asp-validation-summary="All" class="text-danger"></div>
+<h2>Edit Task</h2>
 
 <div id="app">
-    <form asp-action="Add" method="post">
-        <div class="mb-3">
+    <form asp-action="Edit" method="post">
+        <input type="hidden" asp-for="Id" v-model="task.id" />
+        <div class="form-group">
             <label asp-for="Description" class="form-label">Description</label>
             <input asp-for="Description" v-model="task.description" class="form-control" />
             <span asp-validation-for="Description" class="text-danger"></span>
-            <div v-if="task.description.length > 0 && task.description.length < 3" class="alert alert-warning">
-                Description must be at least 3 characters long.
-            </div>
         </div>
-
-        <div class="mb-3">
+        <div class="form-group">
             <label asp-for="DueDate" class="form-label">Due Date</label>
             <input type="date" asp-for="DueDate" v-model="task.dueDate" class="form-control" />
             <span asp-validation-for="DueDate" class="text-danger"></span>
         </div>
-
-        <div class="mb-3">
+        <div class="form-group">
             <label asp-for="StatusId" class="form-label">Status</label>
-            <select asp-for="StatusId" v-model="task.statusId" class="form-select" asp-items="@(new SelectList(ViewBag.Statuses, "StatusId", "Name"))">
-                <option value="">Select a status</option>
+            <select asp-for="StatusId" v-model="task.statusId" class="form-control" asp-items="@(new SelectList(ViewBag.Statuses, "StatusId", "Name"))">
+                <option value="">Please select</option>
             </select>
             <span asp-validation-for="StatusId" class="text-danger"></span>
         </div>
-
-        <button type="submit" class="btn btn-primary">Add</button>
-        <a asp-action="Index" class="btn btn-primary">Cancel</a>
+        <button type="submit" class="btn btn-primary">Update</button>
     </form>
 </div>

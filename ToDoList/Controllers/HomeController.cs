@@ -1,7 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Diagnostics;
-using System.Diagnostics.Metrics;
 using ToDoList.Data;
 using ToDoList.Models;
 
@@ -12,46 +10,44 @@ namespace ToDoList.Controllers
         private ApplicationDbContext _context;
         public HomeController(ApplicationDbContext context) 
         {
-            _context = context;
+            _context = context; 
         }
 
-        public IActionResult Index(string id)
+        public IActionResult Index(string due = "all", string status = "all")
         {
-            var filter = new Filters(id);
-            ViewBag.Filter = filter;
-
-            ViewBag.Statuses = _context.Statuses.ToList();
-            ViewBag.DueFilters = Filters.DueFilterValues;
-            ViewBag.SelectedDueFilter = filter.Due;
-
-            IQueryable<ToDoListing> query = _context.ToDos
-                .Include(t => t.Status);
-
-            if(filter.hasStatus) 
+            ViewBag.DueFilters = new Dictionary<string, string>
             {
-                query = query.Where(t => t.StatusId == filter.StatusId);
-            }
+                {"all", "All"},
+                {"future", "Future"},
+                {"past", "Past"},
+                {"today", "Today"}
+            };
+            ViewBag.Statuses = _context.Statuses.ToList();
+            ViewBag.SelectedDueFilter = due;
+            ViewBag.SelectedStatusId = status;
 
-            if (filter.HasDue) 
+            var tasks = _context.ToDos.Include(t => t.Status).AsQueryable();
+
+            if (due != "all")
             {
                 var today = DateTime.Today;
-                if(filter.IsPast) 
+                tasks = due switch
                 {
-                    query = query.Where(t => t.DueDate < today);
-                }
-                else if (filter.IsFuture)
-                {
-                    query = query.Where(t => t.DueDate > today);
-                }
-                else if (filter.IsToday) 
-                {
-                    query = query.Where(t => t.DueDate == today);
-                }
+                    "future" => tasks.Where(t => t.DueDate > today),
+                    "past" => tasks.Where(t => t.DueDate < today),
+                    "today" => tasks.Where(t => t.DueDate == today),
+                    _ => tasks
+                };
             }
 
-            var tasks = query.OrderBy(t => t.DueDate).ToList();
+            if (status != "all")
+            {
+                tasks = tasks.Where(t => t.Status.StatusId == status);
+            }
 
-            return View(tasks);
+            tasks = tasks.OrderBy(t => t.DueDate);
+
+            return View(tasks.ToList());
         }
 
         [HttpGet]
@@ -82,11 +78,9 @@ namespace ToDoList.Controllers
         }
 
         [HttpPost]
-        public IActionResult Filter(string[] filter) 
+        public IActionResult Filter(string due, string status)
         {
-            string id = string.Join("-", filter);
-
-            return RedirectToAction("Index", new { Id = id});
+            return RedirectToAction("Index", new { due = due, status = status });
         }
 
         [HttpPost]
@@ -102,24 +96,72 @@ namespace ToDoList.Controllers
 
             return RedirectToAction("Index", new { Id = id });
         }
+		
+		[HttpPost]
+		public IActionResult Delete(int id) 
+		{
+			var task = _context.ToDos.Find(id);
+			if (task != null)
+			{
+				_context.ToDos.Remove(task);
+				_context.SaveChanges();
+				return RedirectToAction("Index");
+			}
+			return NotFound(); 
+		}
 
-        [HttpPost]
-        public IActionResult DeleteComplete(string id) 
+        [HttpGet]
+        public IActionResult Edit(int id)
         {
-            var toDelete = _context.ToDos.Where(t => t.StatusId == "closed").ToList();
-
-            foreach(var task in toDelete) 
+            var task = _context.ToDos.Find(id);
+            if (task == null)
             {
-                _context.ToDos.Remove(task);
+                return NotFound();
             }
-            _context.SaveChanges();
-
-            return RedirectToAction("Index", new {Id = id});
+            ViewBag.Statuses = _context.Statuses.ToList();  
+            return View(task);
         }
 
+        [HttpPost]
+        public IActionResult Edit(ToDoListing task)
+        {
+            if (ModelState.IsValid)
+            {
+                _context.Update(task);
+                _context.SaveChanges();
+                return RedirectToAction("Index");
+            }
+            ViewBag.Statuses = _context.Statuses.ToList(); 
+            return View(task);
+        }
         public IActionResult Create()
         {
             return View();
+        }
+
+        [HttpPost]
+        public IActionResult ToggleStatus(int id)
+        {
+            var task = _context.ToDos.Include(t => t.Status).FirstOrDefault(t => t.Id == id);
+            if (task == null)
+            {
+                return NotFound();
+            }
+
+            task.StatusId = task.StatusId == "closed" ? "open" : "closed";
+            try
+            {
+                _context.SaveChanges();
+            }
+            catch (DbUpdateException ex)
+            {
+                
+                return StatusCode(500, "An error occurred while updating the status. Please check the status IDs and database constraints.");
+            }
+
+            _context.Entry(task).Reference(t => t.Status).Load();
+
+            return Json(new { success = true, newStatus = task.Status.Name, newStatusId = task.StatusId });
         }
     }
 }
