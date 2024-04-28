@@ -20,7 +20,14 @@
         });
     </script>
 }
-
+<style>
+    html {
+        /* background-image: url('~/../images/something5.jpg'); */
+        /* background-color:black; */
+       
+        
+    }
+</style>
 <h2>Edit Task</h2>
 
 <div id="app">
@@ -44,5 +51,6 @@
             <span asp-validation-for="StatusId" class="text-danger"></span>
         </div>
         <button type="submit" class="btn btn-primary">Update</button>
+        <button type="button" onclick="window.history.back();" class="btn btn-secondary">Back</button>
     </form>
 </div>
