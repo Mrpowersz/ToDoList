@@ -1,16 +1,16 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using ToDoList.Data;
 using ToDoList.Models;
+using ToDoList.Services;
 
 namespace ToDoList.Controllers
 {
     public class HomeController : Controller
     {
-        private ApplicationDbContext _context;
-        public HomeController(ApplicationDbContext context) 
+        private readonly IHomeService _homeService;
+
+        public HomeController(IHomeService homeService)
         {
-            _context = context; 
+            _homeService = homeService;
         }
 
         public IActionResult Index(string due = "all", string status = "all")
@@ -22,59 +22,68 @@ namespace ToDoList.Controllers
                 {"past", "Past"},
                 {"today", "Today"}
             };
-            ViewBag.Statuses = _context.Statuses.ToList();
+            ViewBag.Statuses = _homeService.GetStatuses();
             ViewBag.SelectedDueFilter = due;
             ViewBag.SelectedStatusId = status;
 
-            var tasks = _context.ToDos.Include(t => t.Status).AsQueryable();
-
-            if (due != "all")
-            {
-                var today = DateTime.Today;
-                tasks = due switch
-                {
-                    "future" => tasks.Where(t => t.DueDate > today),
-                    "past" => tasks.Where(t => t.DueDate < today),
-                    "today" => tasks.Where(t => t.DueDate == today),
-                    _ => tasks
-                };
-            }
-
-            if (status != "all")
-            {
-                tasks = tasks.Where(t => t.Status.StatusId == status);
-            }
-
-            tasks = tasks.OrderBy(t => t.DueDate);
-
-            return View(tasks.ToList());
+            var tasks = _homeService.FilterTasks(due, status).ToList();
+            return View(tasks);
         }
 
-        [HttpGet]
-        public IActionResult Add() 
+        public IActionResult Add()
         {
-            ViewBag.Statuses = _context.Statuses.ToList();
-            var task = new ToDoListing { StatusId = "open" };
-
+            ViewBag.Statuses = _homeService.GetStatuses();
+            var task = new ToDoListing();
             return View(task);
         }
 
         [HttpPost]
-        public IActionResult Add(ToDoListing task) 
+        public IActionResult Add(ToDoListing task)
         {
-            if (ModelState.IsValid) 
+            if (ModelState.IsValid)
             {
-                _context.ToDos.Add(task);
-                _context.SaveChanges();
-
-                return RedirectToAction("Index");   
+                _homeService.Add(task);
+                return RedirectToAction("Index");
             }
-            else 
+            ViewBag.Statuses = _homeService.GetStatuses();
+            return View(task);
+        }
+
+        public IActionResult Edit(int id)
+        {
+            var task = _homeService.GetTask(id);
+            if (task == null)
             {
-                ViewBag.Statuses = _context.Statuses.ToList();
-
-                return View(task);
+                return NotFound();
             }
+            ViewBag.Statuses = _homeService.GetStatuses();
+            return View(task);
+        }
+
+        [HttpPost]
+        public IActionResult Edit(ToDoListing task)
+        {
+            if (ModelState.IsValid)
+            {
+                _homeService.Update(task);
+                return RedirectToAction("Index");
+            }
+            ViewBag.Statuses = _homeService.GetStatuses();
+            return View(task);
+        }
+
+        [HttpPost]
+        public IActionResult Delete(int id)
+        {
+            _homeService.Delete(id);
+            return RedirectToAction("Index");
+        }
+
+        [HttpPost]
+        public IActionResult MarkComplete(int id)
+        {
+            _homeService.MarkComplete(id);
+            return RedirectToAction("Index");
         }
 
         [HttpPost]
@@ -84,84 +93,22 @@ namespace ToDoList.Controllers
         }
 
         [HttpPost]
-        public IActionResult MarkComplete([FromRoute] string id, ToDoListing selected) 
-        {
-            selected = _context.ToDos.Find(selected.Id)!;
-
-            if(selected != null) 
-            {
-                selected.StatusId = "closed";
-                _context.SaveChanges();
-            }
-
-            return RedirectToAction("Index", new { Id = id });
-        }
-		
-		[HttpPost]
-		public IActionResult Delete(int id) 
-		{
-			var task = _context.ToDos.Find(id);
-			if (task != null)
-			{
-				_context.ToDos.Remove(task);
-				_context.SaveChanges();
-				return RedirectToAction("Index");
-			}
-			return NotFound(); 
-		}
-
-        [HttpGet]
-        public IActionResult Edit(int id)
-        {
-            var task = _context.ToDos.Find(id);
-            if (task == null)
-            {
-                return NotFound();
-            }
-            ViewBag.Statuses = _context.Statuses.ToList();  
-            return View(task);
-        }
-
-        [HttpPost]
-        public IActionResult Edit(ToDoListing task)
-        {
-            if (ModelState.IsValid)
-            {
-                _context.Update(task);
-                _context.SaveChanges();
-                return RedirectToAction("Index");
-            }
-            ViewBag.Statuses = _context.Statuses.ToList(); 
-            return View(task);
-        }
-        public IActionResult Create()
-        {
-            return View();
-        }
-
-        [HttpPost]
         public IActionResult ToggleStatus(int id)
         {
-            var task = _context.ToDos.Include(t => t.Status).FirstOrDefault(t => t.Id == id);
-            if (task == null)
-            {
-                return NotFound();
-            }
-
-            task.StatusId = task.StatusId == "closed" ? "open" : "closed";
             try
             {
-                _context.SaveChanges();
+                _homeService.ToggleStatus(id);
+                var task = _homeService.GetTask(id); 
+                return Json(new { success = true, newStatus = task.Status.Name, newStatusId = task.StatusId });
             }
-            catch (DbUpdateException ex)
+            catch (InvalidOperationException ex)
             {
-                
-                return StatusCode(500, "An error occurred while updating the status. Please check the status IDs and database constraints.");
+                if (ex.Message.Contains("Task not found"))
+                {
+                    return NotFound();
+                }
+                return StatusCode(500, ex.Message);
             }
-
-            _context.Entry(task).Reference(t => t.Status).Load();
-
-            return Json(new { success = true, newStatus = task.Status.Name, newStatusId = task.StatusId });
         }
     }
 }
